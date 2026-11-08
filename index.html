@@ -13,7 +13,7 @@
 
 /* Navegación inferior: una sola Mini App, tres vistas */
 .app{padding-bottom:165px}.tab-view[hidden]{display:none!important}.viewtitle{font-weight:800;font-size:19px;margin:5px 2px 18px;letter-spacing:-.4px}
-.tabbar{position:fixed;z-index:8;bottom:0;left:50%;transform:translateX(-50%);width:min(100%,480px);display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--border);background:#fff;padding:9px 10px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -8px 25px rgba(30,41,74,.05)}
+.tabbar{position:fixed;z-index:8;bottom:0;left:50%;transform:translateX(-50%);width:min(100%,480px);display:grid;grid-template-columns:repeat(2,1fr);border-top:1px solid var(--border);background:#fff;padding:9px 10px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -8px 25px rgba(30,41,74,.05)}
 .tablink{background:transparent;border:0;color:#8b94a6;min-height:51px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;font-weight:750;cursor:pointer}.tablink.active{color:var(--purple)}.tabicon{font-size:22px;line-height:22px}.bottom{bottom:calc(70px + env(safe-area-inset-bottom));padding-bottom:12px}.bottom[hidden]{display:none!important}
 .filterrow{display:flex;gap:8px;margin-bottom:14px}.period-btn{border:1px solid var(--border);border-radius:13px;padding:12px 10px;background:white;flex:1;min-width:0;color:#62708a;font-size:12px;font-weight:750;cursor:pointer}.period-btn.active{background:var(--purple);color:#fff;border-color:var(--purple)}
 .summary-strip{display:flex;justify-content:space-between;gap:8px;align-items:center;background:#efedff;border-radius:16px;padding:15px;margin-bottom:12px;color:#5950b3;font-weight:700;font-size:12px}.summary-strip strong{font-size:20px;color:#332b85;white-space:nowrap}.movement-item{display:flex;justify-content:space-between;align-items:center;gap:12px;background:white;border:1px solid var(--border);border-radius:16px;padding:14px 15px;margin-bottom:9px}.movement-left{min-width:0;flex:1}.movement-category{font-weight:800;font-size:13px;overflow-wrap:anywhere}.movement-sub{color:var(--muted);font-size:11px;margin-top:5px;line-height:1.5;overflow-wrap:anywhere}.movement-amount{font-size:16px;font-weight:800;white-space:nowrap}.available-group{margin-bottom:17px}.available-group-title{font-size:12px;font-weight:850;color:#6a7188;margin:3px 0 9px}.available-item{display:flex;align-items:center;justify-content:space-between;padding:13px 14px;border:1px solid var(--border);background:#fff;border-radius:12px;margin-bottom:7px;gap:10px;font-size:12px}.available-item strong{font-size:13px;white-space:nowrap}.available-item.negative strong{color:#ca4b59}.read-help{text-align:center;color:#99a3b5;font-size:11px;line-height:1.6;padding:8px 7px}.placeholder{padding:25px 12px;color:#8e98ac;text-align:center;line-height:1.6;font-size:13px}.try-again{border:1px solid #d5d1ff;border-radius:12px;background:#f7f6ff;color:var(--purple);padding:10px 13px;font-weight:750;margin-top:10px;cursor:pointer}
@@ -39,21 +39,14 @@
   <div id="movementsList" class="list-of-movements"><div class="placeholder">Selecciona un periodo para consultar tus gastos.</div></div>
   <div class="read-help">Se consultan los movimientos de la hoja Gastos.</div>
 </div>
-<div id="view-available" class="tab-view" hidden>
-  <div class="viewtitle">Disponible por categoría</div>
-  <div class="summary-strip"><span>Saldo total de categorías</span><strong id="availableTotal">—</strong></div>
-  <div id="availableList" class="available-groups"><div class="placeholder">Consulta los saldos de la hoja TOTALES.</div></div>
-  <div class="read-help">Estos importes se leen directamente de TOTALES, sin recalcular ni modificar sus fórmulas.</div>
-</div>
 </div>
 <div class="bottom" id="saveBar"><button class="save" id="save" disabled>Guardar gasto →</button></div>
 <nav class="tabbar" aria-label="Menú principal">
   <button type="button" class="tablink active" data-tab="register"><span class="tabicon">✚</span><span>Registrar</span></button>
   <button type="button" class="tablink" data-tab="movements"><span class="tabicon">▤</span><span>Movimientos</span></button>
-  <button type="button" class="tablink" data-tab="available"><span class="tabicon">◉</span><span>Disponible</span></button>
 </nav>
 <script>
-// Pega aquí la URL /exec del despliegue web de Google Apps Script.
+// URL del Worker de Cloudflare, por ejemplo https://gastos-api.tucuenta.workers.dev
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyc80EpBGuRaxm_SOXyyxRK6vPy6HMX9174hFP7JVxSeW3Ee4pmEpkfst0U4u4U6NV8/exec';
 const GROUPS=[
 {n:'Esenciales',e:'🛒',items:[['Alimentos','🥑'],['Higiene / Cuidado personal','🧴'],['Lavandería','🧺'],['Ropa y calzado Vale','👗'],['Ropa y calzado Angel','👕'],['Médico','🩺'],['GYM','💪']]},
@@ -104,161 +97,124 @@ function drawAccounts(){
 function candidates(){let all=GROUPS.flatMap(g=>g.items.map(([n,e])=>({n,e,g:g.n})));let q=$('search').value.trim().toLocaleLowerCase('es');if(q)return all.filter(x=>(x.n+' '+x.g).toLocaleLowerCase('es').includes(q));if(activeGroup==='Frecuentes'){let names=recent.length?recent.slice(0,9):['Alimentos','Gasolina','Gastos Vale','Entretenimiento / Salidas','Higiene / Cuidado personal','Gatas'];return names.map(n=>all.find(x=>x.n===n)).filter(Boolean)}return all.filter(x=>x.g===activeGroup)}
 function drawCategories(){$('groups').innerHTML='';['Frecuentes',...GROUPS.map(g=>g.n)].forEach(n=>{let b=document.createElement('button');b.className='chip'+(activeGroup===n?' active':'');b.textContent=n==='Frecuentes'?'⭐ Frecuentes':(GROUPS.find(g=>g.n===n)?.e+' '+n);b.onclick=()=>{activeGroup=n;$('search').value='';drawCategories()};$('groups').appendChild(b)});const items=candidates();$('categories').innerHTML='';if(!items.length){$('categories').innerHTML='<div class="empty">No encontramos esa categoría.</div>'}items.forEach(x=>{const b=document.createElement('button');b.type='button';b.className='cat'+(x.n===selectedCategory?' active':'');b.innerHTML=`<span class="emoji">${x.e}</span><span>${x.n}</span>`;b.onclick=()=>{selectedCategory=x.n;$('selectionLabel').textContent=x.n;drawCategories();validate()};$('categories').appendChild(b)})}
 $('search').addEventListener('input',drawCategories);
-function validate(){const v=Number($('amount').value);$('save').disabled=!!pending || !(Number.isFinite(v)&&v>0&&selectedCategory&&visibleAccounts.some(a=>a.name===selectedAccount)&&$('date').value)}
-$('amount').addEventListener('input',validate);
-let toastTimeout;function toast(s){$('toast').textContent=s;$('toast').style.display='block';clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>$('toast').style.display='none',2800)}
-// Envío mediante formulario POST a un iframe: evita los problemas de CORS
-// frecuentes al llamar Apps Script desde un dominio de GitHub Pages.
-const sendFrame=document.createElement('iframe');
-sendFrame.name='gastos_receiver';sendFrame.id='gastos_receiver';sendFrame.style.display='none';
-sendFrame.setAttribute('title','Respuesta del registro de gastos');document.body.appendChild(sendFrame);
-const sendForm=document.createElement('form');sendForm.method='POST';sendForm.target='gastos_receiver';
-sendForm.style.display='none';document.body.appendChild(sendForm);
+// La Mini App llama a la API HTTPS del Worker. No hay iframe ni JSONP.
+const formatMxn=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:2}).format(Number(n)||0);
+const safeText=s=>String(s??'');
+function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=safeText(txt);return n}
+function newRequestId(){const bytes=new Uint8Array(24);crypto.getRandomValues(bytes);return [...bytes].map(v=>v.toString(16).padStart(2,'0')).join('')}
 let pending=null;
-// Verifica el resultado en una consulta independiente por ticket, aun cuando
-// Google no permita que el iframe de Apps Script envíe postMessage.
-function newRequestId(){
-  const bytes=new Uint8Array(24);crypto.getRandomValues(bytes);
-  return [...bytes].map(v=>v.toString(16).padStart(2,'0')).join('');
-}
-const receiptPolls=new Map();
-window.gastosReceiptResponse=function(data){
-  if(!data || !data.requestId || data.type==='gastos:pending')return;
-  finishReceiptPoll(data.requestId);
-  handleServerResponse(data);
-};
-function finishReceiptPoll(id){
-  const job=receiptPolls.get(id);
-  if(!job)return;
-  clearInterval(job.interval);clearTimeout(job.timeout);
-  receiptPolls.delete(id);
-}
-function startReceiptPoll(id,kind){
-  let attempts=0;
-  const check=()=>{
-    if(!receiptPolls.has(id))return;
-    attempts++;
+let currentTab='register';
+let activePeriod='month';
+let readSequence=0;
+let savedRetry=null;
+// Si falla la red, conservar el mismo ID para reintentar sin duplicar el gasto.
+try{savedRetry=JSON.parse(sessionStorage.getItem('gastos_pending_retry')||'null')}catch(e){}
+let toastTimeout;
+function toast(s){$('toast').textContent=s;$('toast').style.display='block';clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>$('toast').style.display='none',4000)}
+function apiConfigured(){return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(APPS_SCRIPT_URL)}
+// Lectura autenticada JSONP. No se publican datos sin verificar la firma de Telegram en GAS.
+// Evita caches, y nunca coloca la sesion en localStorage.
+function jsonpCall(data){
+  return new Promise((resolve,reject)=>{
+    const cb='gastosCb_'+newRequestId();
     const script=document.createElement('script');
-    script.src=APPS_SCRIPT_URL+'?requestId='+encodeURIComponent(id)+'&callback=gastosReceiptResponse&v='+attempts;
-    script.async=true;
-    script.onload=()=>script.remove();
-    script.onerror=()=>script.remove();
+    const initData=window.Telegram?.WebApp?.initData||'';
+    if(!initData){reject(new Error('Abre la Mini App desde el botón de Telegram'));return}
+    if(!apiConfigured()){reject(new Error('Configura la URL /exec de Apps Script'));return}
+    let settled=false;
+    let timer;
+    const cleanup=()=>{clearTimeout(timer);delete window[cb];script.remove()};
+    window[cb]=(response)=>{
+      if(settled)return;
+      settled=true;cleanup();
+      if(!response || response.requestId!==data.requestId){reject(new Error('Respuesta inválida'));return}
+      if(response.ok!==true){reject(new Error(response.error||'Error de consulta'));return}
+      resolve(response);
+    };
+    script.onerror=()=>{if(settled)return;settled=true;cleanup();reject(new Error('No se pudo consultar Apps Script'))};
+    timer=setTimeout(()=>{if(settled)return;settled=true;cleanup();reject(new Error('La consulta tardó demasiado'))},14000);
+    const query=new URLSearchParams({...data,initData,callback:cb,_:String(Date.now())});
+    script.src=APPS_SCRIPT_URL+'?'+query.toString();
     document.head.appendChild(script);
-  };
-  const interval=setInterval(check,1800);
-  const timeout=setTimeout(()=>{
-    finishReceiptPoll(id);
-    if(kind==='register' && pending?.id===id){
-      unlockSave();toast('No se confirmó el registro. Revisa Sheets antes de volver a guardar.');
-    }
-    if(kind!=='register' && pendingRead?.id===id){
-      const p=pendingRead;pendingRead=null;displayReadError(p.kind,'No llegó respuesta del servidor. Revisa la implementación.');
-    }
-  },34000);
-  receiptPolls.set(id,{interval,timeout});
-  setTimeout(check,450);
+  });
 }
-function handleServerResponse(data){
-  if(pending?.id===data.requestId){
-    finishReceiptPoll(data.requestId);
-    if(data.ok){resetFormAfterSave();unlockSave();toast('✓ Gasto guardado en Google Sheets');
-      try{window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')}catch(e){}
-    }else{unlockSave();toast('No se guardó: '+(data.error||'Error desconocido'))}
-    return;
-  }
-  if(pendingRead?.id===data.requestId){
-    finishReceiptPoll(data.requestId);
-    const p=pendingRead;pendingRead=null;
-    if(!data.ok){displayReadError(p.kind,data.error||'Error desconocido');return}
-    if(p.kind==='movements')drawMovements(data);else drawAvailable(data);
-  }
+function postViaForm(data){
+  if(!apiConfigured())throw new Error('Configura la URL /exec de Apps Script');
+  const initData=window.Telegram?.WebApp?.initData||'';
+  if(!initData)throw new Error('Abre la Mini App desde el botón de Telegram');
+  // El formulario puede escribir en GAS sin CORS; la confirmación se hace por ID.
+  const name='gasWrite_'+newRequestId().slice(0,20);
+  const iframe=document.createElement('iframe');
+  iframe.name=name;iframe.style.display='none';iframe.setAttribute('title','Envio de gasto');
+  const form=document.createElement('form');form.method='POST';form.action=APPS_SCRIPT_URL;form.target=name;
+  form.style.display='none';form.acceptCharset='UTF-8';
+  const field=document.createElement('input');field.type='hidden';field.name='payload';field.value=JSON.stringify({...data,initData});
+  form.appendChild(field);document.body.appendChild(iframe);document.body.appendChild(form);
+  form.submit();
+  // Limpieza diferida: no abortar el envio al quitar el iframe demasiado pronto.
+  setTimeout(()=>{form.remove();iframe.remove()},45000);
 }
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function apiCall(data){
+  if(data.action==='movements')return jsonpCall(data);
+  if(data.action!=='register')throw new Error('Operación no disponible');
+  postViaForm(data);
+  // La primera consulta evita marcar como fallo un registro que tarda en completarse.
+  for(let attempt=0;attempt<8;attempt++){
+    await wait(attempt===0?1500:1800);
+    try{
+      const result=await jsonpCall({action:'status',requestId:data.requestId});
+      if(result.saved===true)return result;
+    }catch(error){
+      if(/no autorizado|firma|sesión|configuraci|otro usuario/i.test(error.message))throw error;
+    }
+  }
+  throw new Error('No fue posible confirmar el registro; revisa Sheets antes de reintentar');
+}
+function validate(){const v=Number($('amount').value);$('save').disabled=!!pending || !(Number.isFinite(v)&&v>0&&selectedCategory&&visibleAccounts.some(a=>a.name===selectedAccount)&&$('date').value)}
 function resetFormAfterSave(){
   const idx=recent.indexOf(selectedCategory);if(idx>=0)recent.splice(idx,1);
   recent.unshift(selectedCategory);localStorage.setItem('categorias_v1',JSON.stringify(recent.slice(0,12)));
   $('amount').value='';$('notes').value='';selectedCategory='';activeGroup='Frecuentes';$('search').value='';
-  $('selectionLabel').textContent='Elige una categoría';drawCategories();validate();
+  $('selectionLabel').textContent='Elige una categoría';drawCategories();
 }
-function unlockSave(){pending=null;$('save').textContent='Guardar gasto →';validate()}
-window.addEventListener('message',event=>{
-  if(!pending)return;
-  const data=event.data;
-  if(!data||data.type!=='gastos:result'||data.requestId!==pending.id)return;
-  // La respuesta debe venir del documento de Google Apps Script y coincidir con el envío activo.
-  const host=event.origin.replace(/^https:\/\//,'').split(':')[0].toLowerCase();
-  if(host!=='script.google.com'&&!host.endsWith('.googleusercontent.com'))return;
-  handleServerResponse(data);
-});
-$('save').onclick=()=>{
+$('amount').addEventListener('input',()=>{if(savedRetry){savedRetry=null;sessionStorage.removeItem('gastos_pending_retry');$('save').textContent='Guardar gasto →'}validate()});
+$('save').addEventListener('click',async()=>{
   if($('save').disabled||pending)return;
-  const initData=window.Telegram?.WebApp?.initData||'';
-  if(!initData){toast('Abre esta Mini App desde el bot de Telegram');return}
-  if(!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(APPS_SCRIPT_URL)){
-    toast('Falta configurar la URL de Apps Script');return
-  }
-  const expense={amount:Math.round(Number($('amount').value)*100)/100,
-    date:$('date').value,category:selectedCategory,
-    group:GROUPS.find(g=>g.items.some(i=>i[0]===selectedCategory))?.n||'',
-    account:selectedAccount,note:$('notes').value.trim()};
-  const id=newRequestId();
-  pending={id,timeout:null};
-  $('save').disabled=true;$('save').textContent='Guardando...';
-  sendForm.action=APPS_SCRIPT_URL;sendForm.replaceChildren();
-  Object.entries({...expense,requestId:id,initData}).forEach(([key,value])=>{
-    const f=document.createElement('input');f.type='hidden';f.name=key;f.value=String(value);
-    sendForm.appendChild(f)
-  });
-  sendForm.submit();
-  startReceiptPoll(id,'register');
-};
-
-// Consultas protegidas. La respuesta regresa por el mismo iframe del formulario,
-// evitando exponer initData o los movimientos en parámetros de la URL.
-let currentTab='register';
-let activePeriod='month';
-let pendingRead=null;
-const formatMxn=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:2}).format(Number(n)||0);
-const safeText=s=>String(s??'');
-function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=safeText(txt);return n}
+  const expense={action:'register',amount:Math.round(Number($('amount').value)*100)/100,
+      date:$('date').value,category:selectedCategory,
+      group:GROUPS.find(g=>g.items.some(i=>i[0]===selectedCategory))?.n||'',
+      account:selectedAccount,note:$('notes').value.trim()};
+  // Solo reusar el ID si el gasto es idéntico (idempotencia de reintentos).
+  const key=JSON.stringify(expense);
+  const id=savedRetry?.key===key?savedRetry.requestId:newRequestId();
+  pending={id};$('save').disabled=true;$('save').textContent='Guardando...';
+  try{
+    const response=await apiCall({...expense,requestId:id});
+    if(response.saved!==true)throw new Error('El servidor no confirmó el guardado');
+    savedRetry=null;sessionStorage.removeItem('gastos_pending_retry');
+    resetFormAfterSave();$('save').textContent='Guardar gasto →';toast('✓ Gasto guardado correctamente');
+    try{window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')}catch(e){}
+  }catch(err){
+    savedRetry={requestId:id,key};sessionStorage.setItem('gastos_pending_retry',JSON.stringify(savedRetry));
+    $('save').textContent='Reintentar mismo gasto';
+    toast('No se pudo confirmar: '+(err.name==='AbortError'?'se agotó el tiempo de espera':err.message)+'. Revisa Sheets; reintentar conserva el mismo ID.');
+  }finally{pending=null;validate()}
+});
 function changeTab(tab){
   currentTab=tab;
-  ['register','movements','available'].forEach(t=>{$('view-'+t).hidden=t!==tab;});
+  ['register','movements'].forEach(t=>{$('view-'+t).hidden=t!==tab});
   document.querySelectorAll('.tablink').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   $('saveBar').hidden=tab!=='register';
-  if(tab==='movements')loadRead('movements',activePeriod);
-  if(tab==='available')loadRead('available');
+  if(tab==='movements')loadMovements();
   window.scrollTo(0,0);
 }
 document.querySelectorAll('.tablink').forEach(b=>b.addEventListener('click',()=>changeTab(b.dataset.tab)));
 document.querySelectorAll('.period-btn').forEach(b=>b.addEventListener('click',()=>{
   activePeriod=b.dataset.period;
   document.querySelectorAll('.period-btn').forEach(x=>x.classList.toggle('active',x.dataset.period===activePeriod));
-  loadRead('movements',activePeriod);
+  loadMovements();
 }));
-function displayReadError(kind,reason){
-  const box=kind==='movements'?$('movementsList'):$('availableList');
-  box.replaceChildren();box.appendChild(el('div','placeholder','No se pudo consultar: '+reason));
-  const btn=el('button','try-again','Reintentar');btn.type='button';btn.onclick=()=>loadRead(kind,activePeriod);box.appendChild(btn);
-}
-function loadRead(kind,period){
-  const box=kind==='movements'?$('movementsList'):$('availableList');
-  if(pendingRead){finishReceiptPoll(pendingRead.id);pendingRead=null}
-  if(pending){displayReadError(kind,'Hay un gasto pendiente de confirmación.');return}
-  const initData=window.Telegram?.WebApp?.initData||'';
-  if(!initData){displayReadError(kind,'Abre la app desde Telegram.');return}
-  if(!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(APPS_SCRIPT_URL)){
-    displayReadError(kind,'Configura la URL de Apps Script.');return
-  }
-  box.replaceChildren(el('div','placeholder','Consultando información...'));
-  const id=newRequestId();
-  pendingRead={id,kind,timeout:null};
-  sendForm.action=APPS_SCRIPT_URL;sendForm.replaceChildren();
-  Object.entries({action:kind==='movements'?'movements':'available',period:period||'',requestId:id,initData}).forEach(([key,value])=>{
-    const f=document.createElement('input');f.type='hidden';f.name=key;f.value=String(value);sendForm.appendChild(f)
-  });
-  sendForm.submit();
-  startReceiptPoll(id,kind);
-}
 function drawMovements(data){
   $('movementsCount').textContent=`${data.count??0} movimiento(s)`;
   $('movementsTotal').textContent=formatMxn(data.total);
@@ -273,27 +229,19 @@ function drawMovements(data){
   });
   if(data.more)box.appendChild(el('div','read-help','Se muestran los movimientos más recientes del periodo.'));
 }
-function drawAvailable(data){
-  $('availableTotal').textContent=formatMxn(data.total);
-  const box=$('availableList');box.replaceChildren();
-  if(!data.groups?.length){box.appendChild(el('div','placeholder','No se encontraron saldos en TOTALES.'));return}
-  data.groups.forEach(group=>{
-    const g=el('section','available-group');g.appendChild(el('div','available-group-title',group.name));
-    group.items.forEach(item=>{
-      const line=el('div','available-item'+(item.amount<0?' negative':''));
-      line.appendChild(el('span','',item.name));line.appendChild(el('strong','',formatMxn(item.amount)));g.appendChild(line);
-    });box.appendChild(g);
-  });
+async function loadMovements(){
+  const seq=++readSequence;
+  const box=$('movementsList');box.replaceChildren(el('div','placeholder','Consultando movimientos...'));
+  try{
+    const data=await apiCall({action:'movements',period:activePeriod,requestId:newRequestId()});
+    if(seq!==readSequence)return;
+    drawMovements(data);
+  }catch(err){
+    if(seq!==readSequence)return;
+    box.replaceChildren(el('div','placeholder','No se pudo consultar: '+err.message));
+    const btn=el('button','try-again','Reintentar');btn.type='button';btn.onclick=loadMovements;box.appendChild(btn);
+  }
 }
-window.addEventListener('message',event=>{
-  if(!pendingRead)return;
-  const data=event.data;
-  if(!data||data.type!=='gastos:result'||data.requestId!==pendingRead.id)return;
-  const host=event.origin.replace(/^https:\/\//,'').split(':')[0].toLowerCase();
-  if(host!=='script.google.com'&&!host.endsWith('.googleusercontent.com'))return;
-  handleServerResponse(data);
-});
-
 try{window.Telegram?.WebApp?.ready();window.Telegram?.WebApp?.expand()}catch(e){}
 drawAccounts();drawCategories();validate();
 </script>
