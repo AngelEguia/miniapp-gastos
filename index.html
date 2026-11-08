@@ -115,6 +115,64 @@ sendFrame.setAttribute('title','Respuesta del registro de gastos');document.body
 const sendForm=document.createElement('form');sendForm.method='POST';sendForm.target='gastos_receiver';
 sendForm.style.display='none';document.body.appendChild(sendForm);
 let pending=null;
+// Verifica el resultado en una consulta independiente por ticket, aun cuando
+// Google no permita que el iframe de Apps Script envíe postMessage.
+function newRequestId(){
+  const bytes=new Uint8Array(24);crypto.getRandomValues(bytes);
+  return [...bytes].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+const receiptPolls=new Map();
+window.gastosReceiptResponse=function(data){
+  if(!data || !data.requestId || data.type==='gastos:pending')return;
+  finishReceiptPoll(data.requestId);
+  handleServerResponse(data);
+};
+function finishReceiptPoll(id){
+  const job=receiptPolls.get(id);
+  if(!job)return;
+  clearInterval(job.interval);clearTimeout(job.timeout);
+  receiptPolls.delete(id);
+}
+function startReceiptPoll(id,kind){
+  let attempts=0;
+  const check=()=>{
+    if(!receiptPolls.has(id))return;
+    attempts++;
+    const script=document.createElement('script');
+    script.src=APPS_SCRIPT_URL+'?requestId='+encodeURIComponent(id)+'&callback=gastosReceiptResponse&v='+attempts;
+    script.async=true;
+    script.onload=()=>script.remove();
+    script.onerror=()=>script.remove();
+    document.head.appendChild(script);
+  };
+  const interval=setInterval(check,1800);
+  const timeout=setTimeout(()=>{
+    finishReceiptPoll(id);
+    if(kind==='register' && pending?.id===id){
+      unlockSave();toast('No se confirmó el registro. Revisa Sheets antes de volver a guardar.');
+    }
+    if(kind!=='register' && pendingRead?.id===id){
+      const p=pendingRead;pendingRead=null;displayReadError(p.kind,'No llegó respuesta del servidor. Revisa la implementación.');
+    }
+  },34000);
+  receiptPolls.set(id,{interval,timeout});
+  setTimeout(check,450);
+}
+function handleServerResponse(data){
+  if(pending?.id===data.requestId){
+    finishReceiptPoll(data.requestId);
+    if(data.ok){resetFormAfterSave();unlockSave();toast('✓ Gasto guardado en Google Sheets');
+      try{window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')}catch(e){}
+    }else{unlockSave();toast('No se guardó: '+(data.error||'Error desconocido'))}
+    return;
+  }
+  if(pendingRead?.id===data.requestId){
+    finishReceiptPoll(data.requestId);
+    const p=pendingRead;pendingRead=null;
+    if(!data.ok){displayReadError(p.kind,data.error||'Error desconocido');return}
+    if(p.kind==='movements')drawMovements(data);else drawAvailable(data);
+  }
+}
 function resetFormAfterSave(){
   const idx=recent.indexOf(selectedCategory);if(idx>=0)recent.splice(idx,1);
   recent.unshift(selectedCategory);localStorage.setItem('categorias_v1',JSON.stringify(recent.slice(0,12)));
@@ -129,10 +187,7 @@ window.addEventListener('message',event=>{
   // La respuesta debe venir del documento de Google Apps Script y coincidir con el envío activo.
   const host=event.origin.replace(/^https:\/\//,'').split(':')[0].toLowerCase();
   if(host!=='script.google.com'&&!host.endsWith('.googleusercontent.com'))return;
-  clearTimeout(pending.timeout);
-  if(data.ok){resetFormAfterSave();unlockSave();toast('✓ Gasto guardado en Google Sheets');
-    try{window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')}catch(e){}
-  }else{unlockSave();toast('No se guardó: '+(data.error||'Error desconocido'))}
+  handleServerResponse(data);
 });
 $('save').onclick=()=>{
   if($('save').disabled||pending)return;
@@ -145,7 +200,7 @@ $('save').onclick=()=>{
     date:$('date').value,category:selectedCategory,
     group:GROUPS.find(g=>g.items.some(i=>i[0]===selectedCategory))?.n||'',
     account:selectedAccount,note:$('notes').value.trim()};
-  const id='g'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,14);
+  const id=newRequestId();
   pending={id,timeout:null};
   $('save').disabled=true;$('save').textContent='Guardando...';
   sendForm.action=APPS_SCRIPT_URL;sendForm.replaceChildren();
@@ -153,10 +208,8 @@ $('save').onclick=()=>{
     const f=document.createElement('input');f.type='hidden';f.name=key;f.value=String(value);
     sendForm.appendChild(f)
   });
-  pending.timeout=setTimeout(()=>{
-    unlockSave();toast('No se confirmó el guardado. Revisa Google Sheets antes de reintentar.');
-  },25000);
   sendForm.submit();
+  startReceiptPoll(id,'register');
 };
 
 // Consultas protegidas. La respuesta regresa por el mismo iframe del formulario,
@@ -189,7 +242,7 @@ function displayReadError(kind,reason){
 }
 function loadRead(kind,period){
   const box=kind==='movements'?$('movementsList'):$('availableList');
-  if(pendingRead){clearTimeout(pendingRead.timeout);pendingRead=null}
+  if(pendingRead){finishReceiptPoll(pendingRead.id);pendingRead=null}
   if(pending){displayReadError(kind,'Hay un gasto pendiente de confirmación.');return}
   const initData=window.Telegram?.WebApp?.initData||'';
   if(!initData){displayReadError(kind,'Abre la app desde Telegram.');return}
@@ -197,17 +250,14 @@ function loadRead(kind,period){
     displayReadError(kind,'Configura la URL de Apps Script.');return
   }
   box.replaceChildren(el('div','placeholder','Consultando información...'));
-  const id='r'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,13);
+  const id=newRequestId();
   pendingRead={id,kind,timeout:null};
   sendForm.action=APPS_SCRIPT_URL;sendForm.replaceChildren();
   Object.entries({action:kind==='movements'?'movements':'available',period:period||'',requestId:id,initData}).forEach(([key,value])=>{
     const f=document.createElement('input');f.type='hidden';f.name=key;f.value=String(value);sendForm.appendChild(f)
   });
-  pendingRead.timeout=setTimeout(()=>{
-    if(pendingRead?.id!==id)return;
-    pendingRead=null;displayReadError(kind,'Tiempo de espera agotado.');
-  },25000);
   sendForm.submit();
+  startReceiptPoll(id,kind);
 }
 function drawMovements(data){
   $('movementsCount').textContent=`${data.count??0} movimiento(s)`;
@@ -241,9 +291,7 @@ window.addEventListener('message',event=>{
   if(!data||data.type!=='gastos:result'||data.requestId!==pendingRead.id)return;
   const host=event.origin.replace(/^https:\/\//,'').split(':')[0].toLowerCase();
   if(host!=='script.google.com'&&!host.endsWith('.googleusercontent.com'))return;
-  const p=pendingRead;clearTimeout(p.timeout);pendingRead=null;
-  if(!data.ok){displayReadError(p.kind,data.error||'Error desconocido');return}
-  if(p.kind==='movements')drawMovements(data); else drawAvailable(data);
+  handleServerResponse(data);
 });
 
 try{window.Telegram?.WebApp?.ready();window.Telegram?.WebApp?.expand()}catch(e){}
